@@ -1,28 +1,56 @@
 @import "tailwindcss";
 
 :root {
-  --background: #080808;
-  --foreground: #f0f0f0;
-  --muted: #666;
-  --border: rgba(255,255,255,0.08);
-  --accent: #7c6af7;
-  --accent-dim: rgba(124,106,247,0.15);
+  --bg: #03050f;
+  --fg: #f1f5f9;
+  --muted: #475569;
+  --border: rgba(255, 255, 255, 0.07);
+  --glass: rgba(255, 255, 255, 0.03);
+  --accent-from: #6366f1;
+  --accent-to: #a78bfa;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-html, body {
-  background: var(--background);
-  color: var(--foreground);
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
   -webkit-font-smoothing: antialiased;
   scroll-behavior: smooth;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, #fff 0%, #a78bfa 45%, #60a5fa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass card */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Subtle noise texture overlay */
+.noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  border-radius: inherit;
 }

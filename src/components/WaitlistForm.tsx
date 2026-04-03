@@ -15,51 +15,55 @@ export default function WaitlistForm() {
 
   if (result?.success) {
     return (
-      <div className="flex items-center gap-3 px-5 py-3 rounded-xl border text-sm"
-        style={{ borderColor: 'rgba(124,106,247,0.4)', background: 'rgba(124,106,247,0.08)', color: '#a89ff7' }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <div
+        className="flex items-center gap-3 px-5 py-3 rounded-xl text-sm"
+        style={{
+          background: 'rgba(99,102,241,0.1)',
+          border: '1px solid rgba(99,102,241,0.25)',
+          color: '#a78bfa',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M2.5 7.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5"
+            strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        You&rsquo;re on the list. We&rsquo;ll be in touch.
+        You&rsquo;re on the list — we&rsquo;ll be in touch.
       </div>
     )
   }
 
   return (
-    <form action={action} className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
-      <div className="flex-1 relative">
-        <input
-          type="email"
-          name="email"
-          placeholder="your@email.com"
-          required
-          autoComplete="email"
-          className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
-          style={{
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#f0f0f0',
-          }}
-          onFocus={e => {
-            e.currentTarget.style.borderColor = 'rgba(124,106,247,0.6)'
-            e.currentTarget.style.background = 'rgba(255,255,255,0.07)'
-          }}
-          onBlur={e => {
-            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
-            e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
-          }}
-        />
-      </div>
+    <form action={action} className="relative flex flex-col sm:flex-row gap-2 w-full max-w-md">
+      <input
+        type="email"
+        name="email"
+        placeholder="your@email.com"
+        required
+        autoComplete="email"
+        className="flex-1 px-4 py-3 rounded-xl text-sm outline-none"
+        style={{
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.09)',
+          color: '#f1f5f9',
+          backdropFilter: 'blur(12px)',
+          transition: 'border-color 0.15s',
+        }}
+        onFocus={e => (e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)')}
+        onBlur={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)')}
+      />
       <button
         type="submit"
         disabled={pending}
-        className="px-5 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap"
+        className="w-full sm:w-auto px-5 py-3 rounded-xl text-sm font-medium disabled:opacity-50 cursor-pointer whitespace-nowrap"
         style={{
-          background: '#7c6af7',
+          background: 'linear-gradient(135deg, #6366f1 0%, #a78bfa 100%)',
           color: '#fff',
+          boxShadow: '0 0 20px rgba(99,102,241,0.35)',
+          transition: 'opacity 0.15s',
         }}
-        onMouseEnter={e => { if (!pending) e.currentTarget.style.background = '#6a59e0' }}
-        onMouseLeave={e => { e.currentTarget.style.background = '#7c6af7' }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+        onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
       >
         {pending ? 'Joining…' : 'Join waitlist'}
       </button>
