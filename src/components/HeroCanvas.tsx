@@ -100,11 +100,24 @@ export default function HeroCanvas() {
     let hoveredIndex = -1
     let animId = 0
     let needsDraw = false
+    let bgImage: ImageData | null = null
+
+    function buildBg() {
+      const img = ctx!.createImageData(W, H)
+      const buf = img.data
+      for (let k = 0; k < buf.length; k += 4) {
+        const v = 28 + ((Math.random() * 20) | 0)
+        buf[k] = buf[k+1] = buf[k+2] = v
+        buf[k+3] = 255
+      }
+      bgImage = img
+    }
 
     function resize() {
       W = canvas!.width  = canvas!.offsetWidth
       H = canvas!.height = canvas!.offsetHeight
       cells = buildCells(W, H)
+      buildBg()
       needsDraw = true
     }
 
@@ -128,7 +141,8 @@ export default function HeroCanvas() {
       if (!anyChanging && !needsDraw) return
       needsDraw = false
 
-      ctx!.clearRect(0, 0, W, H)
+      if (bgImage) ctx!.putImageData(bgImage, 0, 0)
+
       const INSET = 1.8
 
       for (const cell of cells) {
