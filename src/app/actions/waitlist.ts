@@ -33,7 +33,7 @@ export async function joinWaitlist(
   // const resend = new Resend(process.env.RESEND_API_KEY)
   // await resend.emails.send({ ... })
 
-  console.log(`[waitlist] ${normalized} — total: ${waitlist.length}`)
+  console.log(`[juno:waitlist] ${normalized} — total: ${waitlist.length}`)
 
   return { success: true }
 }

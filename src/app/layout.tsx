@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "chatAnalytics — Know what your users are actually asking",
-  description: "Intent clustering and gap detection for AI products. Find out what your users ask that your product can't answer.",
+  title: "Juno — Understand what your users are asking",
+  description: "Intent clustering and gap detection for conversational AI products. Know what your users want, what your product can't answer, and what to build next.",
 };
 
 export default function RootLayout({
