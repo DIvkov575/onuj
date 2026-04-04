@@ -1,279 +1,265 @@
 import WaitlistForm from '@/components/WaitlistForm'
+import Marquee from '@/components/Marquee'
+import FadeUp from '@/components/FadeUp'
+import CountUp from '@/components/CountUp'
+
+const stats = [
+  { value: '3.2×', label: 'faster roadmap decisions' },
+  { value: '68%', label: 'reduction in support escalations' },
+  { value: '10K+', label: 'conversations clustered daily' },
+  { value: '1hr', label: 'time to first insight' },
+]
 
 const features = [
   {
     label: 'Gap Detection',
-    description: 'See exactly which questions your AI fails to answer, ranked by frequency.',
+    description: 'Ranked list of questions your AI fails to answer — with trend data. A sprint ticket, not a chart.',
   },
   {
     label: 'Intent Clustering',
-    description: 'Automatically groups conversations by what users are trying to do — no manual tagging.',
+    description: 'Conversations automatically grouped by what users are trying to do. No categories to define upfront.',
   },
   {
-    label: 'One-line setup',
-    description: 'Wrap your OpenAI or Anthropic client. Zero other changes. Insights within hours.',
+    label: 'One-line SDK',
+    description: 'Wrap your existing OpenAI or Anthropic client. Zero other changes to your codebase.',
   },
-]
-
-const gapRows = [
-  { count: '412', label: 'How do I export data to CSV?', delta: '+3×', hot: true },
-  { count: '287', label: 'Does it support team accounts?', delta: 'new', hot: true },
-  { count: '198', label: 'What are the rate limits?', delta: '+40%', hot: false },
-  { count: '143', label: 'Can I use my own model?', delta: '+22%', hot: false },
-  { count: '91',  label: 'How do I cancel my subscription?', delta: '—', hot: false },
 ]
 
 export default function Home() {
   return (
-    <div style={{ minHeight: '100vh', background: '#030712', color: '#f1f5f9', fontFamily: 'var(--font-geist-sans, system-ui, sans-serif)' }}>
+    <div style={{ minHeight: '100vh', background: '#f0efed', color: '#0a0a0a' }}>
 
       {/* Nav */}
       <header style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        background: 'rgba(3,7,18,0.8)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        position: 'sticky', top: 0, zIndex: 50,
+        background: 'rgba(240,239,237,0.85)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderBottom: '1px solid rgba(0,0,0,0.07)',
       }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em' }}>chatAnalytics</span>
-          <a
-            href="#waitlist"
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              padding: '8px 16px',
-              borderRadius: 8,
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff',
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect x="2" y="2" width="9" height="9" rx="1.5" fill="#0a0a0a"/>
+              <rect x="13" y="2" width="9" height="9" rx="1.5" fill="#0a0a0a" opacity="0.3"/>
+              <rect x="2" y="13" width="9" height="9" rx="1.5" fill="#0a0a0a" opacity="0.3"/>
+              <rect x="13" y="13" width="9" height="9" rx="1.5" fill="#0a0a0a"/>
+            </svg>
+            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em' }}>chatAnalytics</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+            <span style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', cursor: 'default' }}>Product</span>
+            <span style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', cursor: 'default' }}>Docs</span>
+            <a href="#waitlist" className="nav-cta" style={{
+              fontSize: 13, fontWeight: 500,
+              padding: '8px 20px', borderRadius: 999,
+              background: '#0a0a0a', color: '#f0efed',
               textDecoration: 'none',
-            }}
-          >
-            Join waitlist
-          </a>
+            }}>
+              Join waitlist
+            </a>
+          </div>
         </div>
       </header>
 
-      {/* Background */}
-      <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-        <div style={{
-          position: 'absolute',
-          top: -200,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 800,
-          height: 600,
-          background: 'radial-gradient(ellipse, rgba(99,102,241,0.15) 0%, transparent 70%)',
-        }} />
-        <div style={{
-          position: 'absolute',
-          top: 300,
-          right: -100,
-          width: 500,
-          height: 500,
-          background: 'radial-gradient(ellipse, rgba(139,92,246,0.1) 0%, transparent 70%)',
-        }} />
-      </div>
+      {/* Hero card */}
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 32px 0' }}>
+        <div style={{ borderRadius: 16, overflow: 'hidden', position: 'relative', height: 520 }}>
 
-      {/* Hero */}
-      <main style={{ position: 'relative', zIndex: 10, maxWidth: 700, margin: '0 auto', padding: '96px 24px 80px', textAlign: 'center' }}>
-
-        {/* Badge */}
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 14px',
-          borderRadius: 999,
-          background: 'rgba(99,102,241,0.1)',
-          border: '1px solid rgba(99,102,241,0.25)',
-          color: '#a78bfa',
-          fontSize: 12,
-          fontWeight: 500,
-          marginBottom: 32,
-        }}>
-          <span style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: '#6366f1',
-            boxShadow: '0 0 8px #6366f1',
-            display: 'inline-block',
+          {/* Animated gradient */}
+          <div className="hero-grad" style={{
+            position: 'absolute',
+            inset: '-12%',
+            background: 'radial-gradient(130% 130% at 68% 58%, rgb(145, 152, 162) 0%, rgb(148, 46, 10) 50%, rgb(55, 42, 38) 100%)',
           }} />
-          Early access — join the waitlist
-        </div>
 
-        {/* Headline */}
-        <h1 style={{
-          fontSize: 'clamp(2.5rem, 6vw, 4rem)',
-          fontWeight: 700,
-          lineHeight: 1.1,
-          letterSpacing: '-0.04em',
-          marginBottom: 24,
-        }}>
-          Know what your users
-          <br />
-          <span style={{
-            background: 'linear-gradient(135deg, #ffffff 0%, #a78bfa 50%, #60a5fa 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            are actually asking.
-          </span>
-        </h1>
-
-        {/* Subhead */}
-        <p style={{ fontSize: 17, lineHeight: 1.7, color: '#64748b', maxWidth: 500, margin: '0 auto 48px' }}>
-          chatAnalytics finds the questions your AI can&rsquo;t answer and clusters
-          what your users want — so you build the right thing next.
-        </p>
-
-        {/* Waitlist */}
-        <div id="waitlist" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 80 }}>
-          <WaitlistForm />
-          <p style={{ fontSize: 12, color: '#334155' }}>No spam · Early access invites only</p>
-        </div>
-
-        {/* Mock gap report */}
-        <div style={{
-          borderRadius: 16,
-          overflow: 'hidden',
-          textAlign: 'left',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
-        }}>
-          {/* Card header */}
+          {/* Navy overlay — left bloom */}
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '14px 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {[0,1,2].map(i => (
-                  <span key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'inline-block' }} />
-                ))}
-              </div>
-              <span style={{ fontSize: 12, color: '#334155', marginLeft: 4 }}>gap-report.json</span>
-            </div>
-            <span style={{
-              fontSize: 11,
-              padding: '2px 8px',
-              borderRadius: 6,
-              background: 'rgba(99,102,241,0.12)',
-              color: '#818cf8',
-            }}>
-              Last 7 days
-            </span>
-          </div>
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(75% 100% at 18% 50%, rgba(0,1,110,0.6) 0%, transparent 60%)',
+          }} />
 
-          {/* Rows */}
-          <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--font-geist-mono, monospace)' }}>
-            {gapRows.map(({ count, label, delta, hot }) => (
-              <div
-                key={label}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  background: hot ? 'rgba(99,102,241,0.07)' : 'transparent',
-                  border: hot ? '1px solid rgba(99,102,241,0.12)' : '1px solid transparent',
-                }}
-              >
-                <span style={{ width: 32, textAlign: 'right', fontSize: 12, color: '#475569', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                  {count}
-                </span>
-                <span style={{ flex: 1, fontSize: 13, color: hot ? '#c7d2fe' : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {label}
-                </span>
-                <span style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  borderRadius: 5,
-                  flexShrink: 0,
-                  fontFamily: 'var(--font-geist-sans, system-ui)',
-                  background: delta === 'new'
-                    ? 'rgba(99,102,241,0.2)'
-                    : delta.startsWith('+')
-                      ? 'rgba(34,197,94,0.12)'
-                      : 'rgba(255,255,255,0.04)',
-                  color: delta === 'new'
-                    ? '#a78bfa'
-                    : delta.startsWith('+')
-                      ? '#4ade80'
-                      : '#475569',
-                }}>
-                  {delta}
-                </span>
-              </div>
+          {/* Light scattering */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(35% 45% at 32% 42%, rgba(215,222,235,0.22) 0%, transparent 55%)',
+          }} />
+
+          {/* Grain texture */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'400\'%3E%3Cfilter id=\'g\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.72\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3CfeColorMatrix type=\'saturate\' values=\'0\'/%3E%3C/filter%3E%3Crect width=\'400\' height=\'400\' filter=\'url(%23g)\' opacity=\'0.18\'/%3E%3C/svg%3E")',
+            backgroundSize: '220px 220px',
+            mixBlendMode: 'overlay',
+            opacity: 0.9,
+          }} />
+
+          {/* SVG grid — right side, draws in on load */}
+          <svg
+            style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: '48%', opacity: 0.15 }}
+            viewBox="0 0 440 520"
+            preserveAspectRatio="xMidYMid slice"
+          >
+            {[55, 110, 170, 235, 305, 380].map((r, i) => (
+              <circle key={r} className="draw-circle" cx="340" cy="260" r={r} stroke="white" strokeWidth="0.7" fill="none" />
             ))}
+            {Array.from({ length: 18 }, (_, i) => {
+              const a = (i * 360 / 18) * Math.PI / 180
+              return <line key={i} x1="340" y1="260" x2={340 + Math.cos(a) * 420} y2={260 + Math.sin(a) * 420} stroke="white" strokeWidth="0.4" opacity="0.6"/>
+            })}
+            {Array.from({ length: 14 }, (_, row) =>
+              Array.from({ length: 10 }, (_, col) => (
+                <circle key={`${row}-${col}`} cx={180 + col * 26} cy={60 + row * 36} r="1.1" fill="white" opacity="0.5"/>
+              ))
+            )}
+          </svg>
 
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingTop: 12,
-              marginTop: 4,
-              borderTop: '1px solid rgba(255,255,255,0.05)',
-            }}>
-              <span style={{ fontSize: 12, color: '#334155' }}>5 gap clusters · 1,131 unanswered conversations</span>
-              <span style={{
-                fontSize: 12,
-                background: 'linear-gradient(135deg, #6366f1, #a78bfa)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
+          {/* Bottom fade */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: '38%',
+            background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.5))',
+          }} />
+
+          {/* Content */}
+          <div style={{ position: 'relative', zIndex: 10, padding: '52px 56px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 40 }}>
+              <h1 className="hero-h1" style={{
+                fontSize: 'clamp(2.2rem, 3.8vw, 3.5rem)',
+                fontWeight: 600,
+                lineHeight: 1.1,
+                letterSpacing: '-0.04em',
+                color: '#fff',
+                maxWidth: 400,
               }}>
-                View all →
-              </span>
+                Know what your users are asking.
+              </h1>
+              <p className="hero-sub" style={{
+                fontSize: 15,
+                lineHeight: 1.7,
+                color: 'rgba(255,255,255,0.6)',
+                maxWidth: 280,
+                paddingTop: 6,
+              }}>
+                A breakthrough in turning conversation logs into proof of what to build next.
+              </p>
+            </div>
+
+            <div className="hero-cta" id="waitlist">
+              <WaitlistForm />
             </div>
           </div>
         </div>
-      </main>
+      </section>
+
+      {/* Marquee logos */}
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 32px' }}>
+        <Marquee />
+      </section>
+
+      {/* Pull quote */}
+      <FadeUp style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 32px 72px' }}>
+        <p style={{
+          fontSize: 'clamp(1.55rem, 2.8vw, 2.5rem)',
+          fontWeight: 500,
+          lineHeight: 1.25,
+          letterSpacing: '-0.03em',
+          maxWidth: 680,
+          color: '#0a0a0a',
+        }}>
+          Built for teams who refuse to make product decisions based on gut feel.
+        </p>
+      </FadeUp>
 
       {/* Features */}
-      <section style={{ position: 'relative', zIndex: 10, maxWidth: 1000, margin: '0 auto', padding: '0 24px 96px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-          {features.map(({ label, description }) => (
-            <div
-              key={label}
-              style={{
-                padding: '24px',
-                borderRadius: 16,
-                background: 'rgba(255,255,255,0.025)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-              }}
-            >
-              <p style={{ fontSize: 14, fontWeight: 500, color: '#e2e8f0', marginBottom: 8 }}>{label}</p>
-              <p style={{ fontSize: 14, lineHeight: 1.6, color: '#475569' }}>{description}</p>
-            </div>
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 96px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: 'rgba(0,0,0,0.08)' }}>
+          {features.map(({ label, description }, i) => (
+            <FadeUp key={label} delay={i * 100}>
+              <div className="feature-card" style={{ background: '#f0efed', padding: '40px 36px', height: '100%' }}>
+                <p style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+                  textTransform: 'uppercase', color: 'rgba(0,0,0,0.32)', marginBottom: 20,
+                }}>
+                  {label}
+                </p>
+                <p style={{ fontSize: 15, lineHeight: 1.65, color: '#3a3a3a' }}>
+                  {description}
+                </p>
+              </div>
+            </FadeUp>
           ))}
         </div>
       </section>
 
+      {/* Stats */}
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 100px' }}>
+        <FadeUp>
+          <p style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+            textTransform: 'uppercase', color: 'rgba(0,0,0,0.32)', marginBottom: 32,
+          }}>
+            From indie hackers to enterprise
+          </p>
+        </FadeUp>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: 'rgba(0,0,0,0.08)' }}>
+          {stats.map(({ value, label }, i) => (
+            <FadeUp key={label} delay={i * 80}>
+              <div className="stat-card" style={{ background: '#f0efed', padding: '32px 28px' }}>
+                <p style={{
+                  fontSize: 'clamp(1.8rem, 2.8vw, 2.6rem)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.04em',
+                  color: '#0a0a0a',
+                  marginBottom: 8,
+                }}>
+                  <CountUp value={value} />
+                </p>
+                <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.42)', lineHeight: 1.4 }}>{label}</p>
+              </div>
+            </FadeUp>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA band */}
+      <FadeUp style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 100px' }}>
+        <div style={{
+          borderRadius: 16, overflow: 'hidden', position: 'relative',
+          padding: '64px 56px',
+          background: '#0a0a0a',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 40,
+          flexWrap: 'wrap',
+        }}>
+          {/* Subtle rust glow */}
+          <div style={{
+            position: 'absolute', top: '-40%', right: '-10%',
+            width: 500, height: 500,
+            background: 'radial-gradient(ellipse, rgba(148,46,10,0.35) 0%, transparent 65%)',
+            pointerEvents: 'none',
+          }} />
+          <div style={{ position: 'relative' }}>
+            <p style={{ fontSize: 'clamp(1.4rem, 2.5vw, 2rem)', fontWeight: 600, letterSpacing: '-0.03em', color: '#fff', marginBottom: 12 }}>
+              Ready to stop guessing?
+            </p>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+              Join the waitlist. Early access invites going out now.
+            </p>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <WaitlistForm dark />
+          </div>
+        </div>
+      </FadeUp>
+
       {/* Footer */}
       <footer style={{
-        position: 'relative',
-        zIndex: 10,
-        textAlign: 'center',
-        padding: '20px 24px',
-        fontSize: 12,
-        color: '#1e293b',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
+        borderTop: '1px solid rgba(0,0,0,0.08)',
+        padding: '24px 32px',
+        maxWidth: 1200, margin: '0 auto',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        chatAnalytics · 2026
+        <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '-0.01em' }}>chatAnalytics</span>
+        <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.3)' }}>© 2026</span>
       </footer>
     </div>
   )
