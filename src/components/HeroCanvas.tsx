@@ -2,20 +2,84 @@
 
 import { useEffect, useRef } from 'react'
 
-function fieldAt(
-  px: number, py: number,
-  poles: { x: number; y: number; charge: number }[]
-) {
-  let fx = 0, fy = 0
-  for (const p of poles) {
-    const dx = px - p.x
-    const dy = py - p.y
-    const r2 = dx * dx + dy * dy + 600
-    const f = p.charge / r2
-    fx += f * dx
-    fy += f * dy
+function dist(ax: number, ay: number, bx: number, by: number) {
+  return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2)
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+// Clip a convex polygon to the half-plane containing (sx,sy)
+// defined by the perpendicular bisector between (sx,sy) and (ox,oy)
+function clipHalfPlane(
+  poly: [number, number][],
+  sx: number, sy: number,
+  ox: number, oy: number
+): [number, number][] {
+  if (!poly.length) return []
+  const mx = (sx + ox) / 2, my = (sy + oy) / 2
+  const dx = ox - sx, dy = oy - sy
+  const out: [number, number][] = []
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, ay] = poly[i]
+    const [bx, by] = poly[(i + 1) % poly.length]
+    const da = dx * (ax - mx) + dy * (ay - my)
+    const db = dx * (bx - mx) + dy * (by - my)
+    if (da >= 0) out.push([ax, ay])
+    if ((da >= 0) !== (db >= 0)) {
+      const t = da / (da - db)
+      out.push([ax + t * (bx - ax), ay + t * (by - ay)])
+    }
   }
-  return { fx, fy }
+  return out
+}
+
+interface Cell {
+  sx: number; sy: number       // seed
+  poly: [number, number][]     // clipped polygon
+  z: number                    // current z lift (0–32)
+  baseColor: { r: number; g: number; b: number }
+  sortTie: number              // stable sort tiebreaker
+}
+
+function buildCells(W: number, H: number): Cell[] {
+  const COLS = 9, ROWS = 5
+  const seeds: [number, number][] = []
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const jx = (Math.random() - 0.5) * 0.55
+      const jy = (Math.random() - 0.5) * 0.55
+      seeds.push([
+        ((c + 0.5 + jx) / COLS) * W,
+        ((r + 0.5 + jy) / ROWS) * H,
+      ])
+    }
+  }
+
+  const pad = 200
+  const bounds: [number, number][] = [
+    [-pad, -pad], [W + pad, -pad], [W + pad, H + pad], [-pad, H + pad],
+  ]
+
+  return seeds.map(([sx, sy], i) => {
+    let poly: [number, number][] = bounds
+    for (let j = 0; j < seeds.length; j++) {
+      if (j === i) continue
+      poly = clipHalfPlane(poly, sx, sy, seeds[j][0], seeds[j][1])
+      if (!poly.length) break
+    }
+
+    // Sample gradient colour at seed position
+    const tx = sx / W
+    const ty = sy / H
+    const t = tx * 0.6 + ty * 0.4
+    const r = Math.round(lerp(lerp(145, 148, Math.min(t / 0.5, 1)), 55, Math.max(0, (t - 0.5) / 0.5)))
+    const g = Math.round(lerp(lerp(152,  46, Math.min(t / 0.5, 1)), 42, Math.max(0, (t - 0.5) / 0.5)))
+    const b = Math.round(lerp(lerp(162,  10, Math.min(t / 0.5, 1)), 38, Math.max(0, (t - 0.5) / 0.5)))
+
+    return { sx, sy, poly, z: 0, baseColor: { r, g, b }, sortTie: i * 0.0001 }
+  })
 }
 
 export default function HeroCanvas() {
@@ -29,104 +93,86 @@ export default function HeroCanvas() {
 
     let W = 0, H = 0
     let animId = 0
-    const mouse = { x: 0.5, y: 0.5 }
-    let targetMx = 0.5, targetMy = 0.5
+    let cells: Cell[] = []
+    const mouse = { x: -999, y: -999 }
+    let targetMx = -999, targetMy = -999
 
     function resize() {
       W = canvas!.width  = canvas!.offsetWidth
       H = canvas!.height = canvas!.offsetHeight
+      cells = buildCells(W, H)
     }
 
     function draw() {
-      // Smooth mouse tracking
-      mouse.x += (targetMx - mouse.x) * 0.06
-      mouse.y += (targetMy - mouse.y) * 0.06
+      // Smooth mouse
+      mouse.x += (targetMx - mouse.x) * 0.055
+      mouse.y += (targetMy - mouse.y) * 0.055
 
       ctx!.clearRect(0, 0, W, H)
 
-      // Background gradient
-      const bg = ctx!.createRadialGradient(W * 0.68, H * 0.58, 0, W * 0.68, H * 0.58, Math.max(W, H) * 1.3)
-      bg.addColorStop(0,   'rgb(145,152,162)')
-      bg.addColorStop(0.5, 'rgb(148,46,10)')
-      bg.addColorStop(1,   'rgb(55,42,38)')
-      ctx!.fillStyle = bg
-      ctx!.fillRect(0, 0, W, H)
-
-      // Navy overlay
-      const navy = ctx!.createRadialGradient(W * 0.18, H * 0.5, 0, W * 0.18, H * 0.5, W * 0.75)
-      navy.addColorStop(0, 'rgba(0,1,110,0.58)')
-      navy.addColorStop(1, 'rgba(0,1,110,0)')
-      ctx!.fillStyle = navy
-      ctx!.fillRect(0, 0, W, H)
-
-      // Poles placed well outside canvas — create a global flow field
-      const poles = [
-        { x: W * -0.6,  y: H * -0.4,  charge:  60000 },
-        { x: W *  1.6,  y: H * -0.3,  charge: -60000 },
-        { x: W * -0.5,  y: H *  1.5,  charge: -50000 },
-        { x: W *  1.5,  y: H *  1.4,  charge:  50000 },
-        { x: mouse.x * W, y: mouse.y * H, charge: -38000 },
-      ]
-
-      // Seed lines on a uniform grid across the top and left edges
-      const STEPS    = 320
-      const STEPSIZE = 3.2
-      const seeds: [number, number][] = []
-      const COLS = 22
-      const ROWS = 10
-      for (let c = 0; c <= COLS; c++) {
-        seeds.push([c / COLS * W, -2])        // top
-        seeds.push([c / COLS * W, H + 2])     // bottom
-      }
-      for (let r = 0; r <= ROWS; r++) {
-        seeds.push([-2,     r / ROWS * H])    // left
-        seeds.push([W + 2,  r / ROWS * H])    // right
+      // Direct lift — z follows mouse proximity immediately
+      for (const cell of cells) {
+        const d = dist(mouse.x, mouse.y, cell.sx, cell.sy)
+        const radius = Math.min(W, H) * 0.38
+        const proximity = Math.max(0, 1 - d / radius)
+        cell.z = proximity * 32
       }
 
-      for (const [sx, sy] of seeds) {
-        let px = sx, py = sy
-        const points: [number, number][] = [[px, py]]
+      // Sort back to front — sortTie breaks ties stably to prevent z-fighting flicker
+      const sorted = [...cells].sort((a, b) => (a.z + a.sortTie) - (b.z + b.sortTie))
 
-        for (let step = 0; step < STEPS; step++) {
-          const { fx, fy } = fieldAt(px, py, poles)
-          const mag = Math.sqrt(fx * fx + fy * fy) + 1e-9
-          px += (fx / mag) * STEPSIZE
-          py += (fy / mag) * STEPSIZE
-          if (px < -40 || px > W + 40 || py < -40 || py > H + 40) break
-          points.push([px, py])
-        }
+      for (const cell of sorted) {
+        if (cell.poly.length < 3) continue
 
-        if (points.length < 4) continue
+        const z = cell.z
+        const perspective = z / 280
+        const INSET = 1.8
 
+        ctx!.save()
+        // Perspective shift: cells closer to mouse shift slightly toward it
+        const dx = (mouse.x - cell.sx) * perspective * 0.12
+        const dy = (mouse.y - cell.sy) * perspective * 0.12
+        ctx!.translate(dx, dy)
+
+        // Build inset polygon
         ctx!.beginPath()
-        ctx!.moveTo(points[0][0], points[0][1])
-        for (let i = 1; i < points.length - 1; i++) {
-          const mx2 = (points[i][0] + points[i + 1][0]) / 2
-          const my2 = (points[i][1] + points[i + 1][1]) / 2
-          ctx!.quadraticCurveTo(points[i][0], points[i][1], mx2, my2)
+        for (let i = 0; i < cell.poly.length; i++) {
+          const [px, py] = cell.poly[i]
+          // Inset toward centroid
+          const edgeDist = dist(px, py, cell.sx, cell.sy)
+          const insetRatio = edgeDist > 0 ? INSET / edgeDist : 0
+          const ipx = lerp(px, cell.sx, insetRatio)
+          const ipy = lerp(py, cell.sy, insetRatio)
+          i === 0 ? ctx!.moveTo(ipx, ipy) : ctx!.lineTo(ipx, ipy)
         }
+        ctx!.closePath()
 
-        // Brighten lines near cursor
-        const midIdx = Math.floor(points.length / 2)
-        const [midX, midY] = points[midIdx]
-        const dMouse = Math.sqrt((midX - mouse.x * W) ** 2 + (midY - mouse.y * H) ** 2)
-        const proximity = Math.max(0, 1 - dMouse / (W * 0.3))
-        const alpha = 0.1 + proximity * 0.4
+        // Colour: lifted cells brighten
+        const lift = Math.max(0, z)
+        const { r, g, b } = cell.baseColor
+        const br = Math.min(255, r + lift * 1.8)
+        const bg2 = Math.min(255, g + lift * 1.1)
+        const bb = Math.min(255, b + lift * 0.7)
+        ctx!.fillStyle = `rgb(${Math.round(br)},${Math.round(bg2)},${Math.round(bb)})`
+        ctx!.fill()
 
-        ctx!.strokeStyle = `rgba(220,215,210,${alpha})`
-        ctx!.lineWidth = 0.8
+        // Edge: lifted cells get a brighter rim
+        const edgeAlpha = 0.04 + (lift / 38) * 0.22
+        ctx!.strokeStyle = `rgba(255,255,255,${edgeAlpha})`
+        ctx!.lineWidth = 0.9
         ctx!.stroke()
+
+        ctx!.restore()
       }
 
-      // Cursor glow
-      const mx = mouse.x * W, my = mouse.y * H
-      const glow = ctx!.createRadialGradient(mx, my, 0, mx, my, 110)
-      glow.addColorStop(0, 'rgba(215,222,235,0.14)')
-      glow.addColorStop(1, 'rgba(215,222,235,0)')
-      ctx!.fillStyle = glow
-      ctx!.beginPath()
-      ctx!.arc(mx, my, 110, 0, Math.PI * 2)
-      ctx!.fill()
+      // Subtle cursor glow on top
+      if (mouse.x > 0) {
+        const glow = ctx!.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 130)
+        glow.addColorStop(0, 'rgba(215,222,235,0.13)')
+        glow.addColorStop(1, 'rgba(215,222,235,0)')
+        ctx!.fillStyle = glow
+        ctx!.fillRect(0, 0, W, H)
+      }
 
       animId = requestAnimationFrame(draw)
     }
@@ -136,16 +182,24 @@ export default function HeroCanvas() {
 
     const onMove = (e: MouseEvent) => {
       const rect = canvas!.getBoundingClientRect()
-      targetMx = (e.clientX - rect.left)  / rect.width
-      targetMy = (e.clientY - rect.top)   / rect.height
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+      // Only track when inside the canvas bounds
+      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+        targetMx = x
+        targetMy = y
+      } else {
+        targetMx = -999
+        targetMy = -999
+      }
     }
-    canvas.addEventListener('mousemove', onMove)
+    window.addEventListener('mousemove', onMove)
 
     animId = requestAnimationFrame(draw)
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', resize)
-      canvas.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mousemove', onMove)
     }
   }, [])
 
