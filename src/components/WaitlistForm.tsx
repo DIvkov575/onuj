@@ -1,19 +1,32 @@
 'use client'
 
-import { useActionState } from 'react'
-import { joinWaitlist, type WaitlistResult } from '@/app/actions/waitlist'
+import { useState } from 'react'
 
-const initialState: WaitlistResult | null = null
+// Paste your Apps Script deployment URL here
+const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbz5FaM6FqhWSIqkmITgTxvka0SjWdyPlOmuLAtBaZPf0phmMaoh8OL9cYvFQqP4Zv5_/exec'
 
 export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
-  const [result, action, pending] = useActionState(
-    async (_prev: WaitlistResult | null, formData: FormData) => {
-      return joinWaitlist(formData)
-    },
-    initialState
-  )
+  const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
+  const [email, setEmail] = useState('')
 
-  if (result?.success) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email.trim()) return
+    setStatus('pending')
+    try {
+      await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      setStatus('success')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  if (status === 'success') {
     return (
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 10,
@@ -30,6 +43,8 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
       </div>
     )
   }
+
+  const pending = status === 'pending'
 
   const inputStyle: React.CSSProperties = dark ? {
     padding: '10px 18px', borderRadius: 999,
@@ -62,13 +77,14 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
   }
 
   return (
-    <form action={action} style={{ position: 'relative', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <form onSubmit={handleSubmit} style={{ position: 'relative', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       <input
         type="email"
-        name="email"
         placeholder="your@email.com"
         required
         autoComplete="email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
         style={inputStyle}
         onFocus={e => (e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)')}
         onBlur={e => (e.currentTarget.style.borderColor = dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)')}
@@ -82,9 +98,9 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
       >
         {pending ? 'Joining…' : 'Join waitlist'}
       </button>
-      {result && !result.success && (
+      {status === 'error' && (
         <p style={{ position: 'absolute', bottom: -22, left: 0, fontSize: 12, color: dark ? '#fca5a5' : '#dc2626' }}>
-          {result.error}
+          Something went wrong — try again.
         </p>
       )}
     </form>

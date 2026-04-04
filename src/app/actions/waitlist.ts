@@ -1,8 +1,15 @@
 'use server'
 
-// Stores emails in-memory for now; swap for a DB write (Supabase, Postgres, etc.)
-// or a Resend audience when ready.
-const waitlist: string[] = []
+import { appendFileSync, readFileSync } from 'fs'
+import { join } from 'path'
+
+const FILE = join(process.cwd(), 'waitlist.txt')
+
+function readEmails(): string[] {
+  try { return readFileSync(FILE, 'utf8').split('\n').filter(Boolean) } catch { return [] }
+}
+
+const waitlist: string[] = readEmails()
 
 export type WaitlistResult =
   | { success: true }
@@ -28,10 +35,7 @@ export async function joinWaitlist(
   }
 
   waitlist.push(normalized)
-
-  // TODO: replace with persistent storage + Resend confirmation email
-  // const resend = new Resend(process.env.RESEND_API_KEY)
-  // await resend.emails.send({ ... })
+  appendFileSync(FILE, normalized + '\n')
 
   console.log(`[juno:waitlist] ${normalized} — total: ${waitlist.length}`)
 
