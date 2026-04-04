@@ -113,3 +113,8 @@ html, body {
 .nav-cta:hover {
   opacity: 0.75;
 }
+
+/* ── Hero grain placeholder (canvas handles it now) ──── */
+.hero-grain {
+  display: none;
+}

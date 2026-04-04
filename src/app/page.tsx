@@ -2,6 +2,7 @@ import WaitlistForm from '@/components/WaitlistForm'
 import Marquee from '@/components/Marquee'
 import FadeUp from '@/components/FadeUp'
 import CountUp from '@/components/CountUp'
+import Grain from '@/components/Grain'
 
 const stats = [
   { value: '3.2×', label: 'faster roadmap decisions' },
@@ -28,6 +29,7 @@ const features = [
 export default function Home() {
   return (
     <div style={{ minHeight: '100vh', background: '#f0efed', color: '#0a0a0a' }}>
+      <Grain opacity={0.18} zIndex={9999} />
 
       {/* Nav */}
       <header style={{
@@ -86,13 +88,7 @@ export default function Home() {
           }} />
 
           {/* Grain texture */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'400\'%3E%3Cfilter id=\'g\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.72\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3CfeColorMatrix type=\'saturate\' values=\'0\'/%3E%3C/filter%3E%3Crect width=\'400\' height=\'400\' filter=\'url(%23g)\' opacity=\'0.18\'/%3E%3C/svg%3E")',
-            backgroundSize: '220px 220px',
-            mixBlendMode: 'overlay',
-            opacity: 0.9,
-          }} />
+          <div className="hero-grain" />
 
           {/* SVG grid — right side, draws in on load */}
           <svg
