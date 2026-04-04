@@ -2,16 +2,10 @@
 
 import { useEffect, useRef } from 'react'
 
-function dist(ax: number, ay: number, bx: number, by: number) {
-  return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2)
-}
-
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t
 }
 
-// Clip a convex polygon to the half-plane containing (sx,sy)
-// defined by the perpendicular bisector between (sx,sy) and (ox,oy)
 function clipHalfPlane(
   poly: [number, number][],
   sx: number, sy: number,
@@ -35,16 +29,27 @@ function clipHalfPlane(
   return out
 }
 
+function pointInPoly(px: number, py: number, poly: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]
+    const [xj, yj] = poly[j]
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
 interface Cell {
-  sx: number; sy: number       // seed
-  poly: [number, number][]     // clipped polygon
-  z: number                    // current z lift (0–32)
+  sx: number; sy: number
+  poly: [number, number][]
   baseColor: { r: number; g: number; b: number }
-  sortTie: number              // stable sort tiebreaker
+  lift: number  // 0–1, animated
 }
 
 function buildCells(W: number, H: number): Cell[] {
-  const COLS = 9, ROWS = 5
+  const COLS = 15, ROWS = 9
   const seeds: [number, number][] = []
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -62,15 +67,14 @@ function buildCells(W: number, H: number): Cell[] {
     [-pad, -pad], [W + pad, -pad], [W + pad, H + pad], [-pad, H + pad],
   ]
 
-  return seeds.map(([sx, sy], i) => {
+  return seeds.map(([sx, sy]) => {
     let poly: [number, number][] = bounds
     for (let j = 0; j < seeds.length; j++) {
-      if (j === i) continue
+      if (seeds[j][0] === sx && seeds[j][1] === sy) continue
       poly = clipHalfPlane(poly, sx, sy, seeds[j][0], seeds[j][1])
       if (!poly.length) break
     }
 
-    // Sample gradient colour at seed position
     const tx = sx / W
     const ty = sy / H
     const t = tx * 0.6 + ty * 0.4
@@ -78,7 +82,7 @@ function buildCells(W: number, H: number): Cell[] {
     const g = Math.round(lerp(lerp(152,  46, Math.min(t / 0.5, 1)), 42, Math.max(0, (t - 0.5) / 0.5)))
     const b = Math.round(lerp(lerp(162,  10, Math.min(t / 0.5, 1)), 38, Math.max(0, (t - 0.5) / 0.5)))
 
-    return { sx, sy, poly, z: 0, baseColor: { r, g, b }, sortTie: i * 0.0001 }
+    return { sx, sy, poly, baseColor: { r, g, b }, lift: 0 }
   })
 }
 
@@ -92,110 +96,101 @@ export default function HeroCanvas() {
     if (!ctx) return
 
     let W = 0, H = 0
-    let animId = 0
     let cells: Cell[] = []
-    const mouse = { x: -999, y: -999 }
-    let targetMx = -999, targetMy = -999
+    let hoveredIndex = -1
+    let animId = 0
+    let needsDraw = false
 
     function resize() {
       W = canvas!.width  = canvas!.offsetWidth
       H = canvas!.height = canvas!.offsetHeight
       cells = buildCells(W, H)
+      needsDraw = true
     }
 
     function draw() {
-      // Smooth mouse
-      mouse.x += (targetMx - mouse.x) * 0.055
-      mouse.y += (targetMy - mouse.y) * 0.055
+      animId = requestAnimationFrame(draw)
 
-      ctx!.clearRect(0, 0, W, H)
-
-      // Direct lift — z follows mouse proximity immediately
-      for (const cell of cells) {
-        const d = dist(mouse.x, mouse.y, cell.sx, cell.sy)
-        const radius = Math.min(W, H) * 0.38
-        const proximity = Math.max(0, 1 - d / radius)
-        cell.z = proximity * 32
+      // Animate lift values
+      let anyChanging = false
+      for (let i = 0; i < cells.length; i++) {
+        const target = i === hoveredIndex ? 1 : 0
+        const next = lerp(cells[i].lift, target, 0.1)
+        if (Math.abs(next - cells[i].lift) > 0.001) {
+          cells[i].lift = next
+          anyChanging = true
+        } else if (cells[i].lift !== target) {
+          cells[i].lift = target
+          anyChanging = true
+        }
       }
 
-      // Sort back to front — sortTie breaks ties stably to prevent z-fighting flicker
-      const sorted = [...cells].sort((a, b) => (a.z + a.sortTie) - (b.z + b.sortTie))
+      if (!anyChanging && !needsDraw) return
+      needsDraw = false
 
-      for (const cell of sorted) {
+      ctx!.clearRect(0, 0, W, H)
+      const INSET = 1.8
+
+      for (const cell of cells) {
         if (cell.poly.length < 3) continue
-
-        const z = cell.z
-        const perspective = z / 280
-        const INSET = 1.8
+        const { lift } = cell
 
         ctx!.save()
-        // Perspective shift: cells closer to mouse shift slightly toward it
-        const dx = (mouse.x - cell.sx) * perspective * 0.12
-        const dy = (mouse.y - cell.sy) * perspective * 0.12
-        ctx!.translate(dx, dy)
 
-        // Build inset polygon
+        if (lift > 0) {
+          ctx!.translate(cell.sx, cell.sy)
+          ctx!.scale(1 + lift * 0.012, 1 + lift * 0.012)
+          ctx!.translate(-cell.sx, -cell.sy)
+        }
+
         ctx!.beginPath()
-        for (let i = 0; i < cell.poly.length; i++) {
-          const [px, py] = cell.poly[i]
-          // Inset toward centroid
-          const edgeDist = dist(px, py, cell.sx, cell.sy)
+        for (let j = 0; j < cell.poly.length; j++) {
+          const [px, py] = cell.poly[j]
+          const edgeDist = Math.sqrt((px - cell.sx) ** 2 + (py - cell.sy) ** 2)
           const insetRatio = edgeDist > 0 ? INSET / edgeDist : 0
           const ipx = lerp(px, cell.sx, insetRatio)
           const ipy = lerp(py, cell.sy, insetRatio)
-          i === 0 ? ctx!.moveTo(ipx, ipy) : ctx!.lineTo(ipx, ipy)
+          j === 0 ? ctx!.moveTo(ipx, ipy) : ctx!.lineTo(ipx, ipy)
         }
         ctx!.closePath()
 
-        // Colour: lifted cells brighten
-        const lift = Math.max(0, z)
         const { r, g, b } = cell.baseColor
-        const br = Math.min(255, r + lift * 1.8)
-        const bg2 = Math.min(255, g + lift * 1.1)
-        const bb = Math.min(255, b + lift * 0.7)
-        ctx!.fillStyle = `rgb(${Math.round(br)},${Math.round(bg2)},${Math.round(bb)})`
+        const boost = lift * 18
+        ctx!.fillStyle = `rgb(${Math.min(255, Math.round(r + boost))},${Math.min(255, Math.round(g + boost * 0.6))},${Math.min(255, Math.round(b + boost * 0.4))})`
         ctx!.fill()
 
-        // Edge: lifted cells get a brighter rim
-        const edgeAlpha = 0.04 + (lift / 38) * 0.22
-        ctx!.strokeStyle = `rgba(255,255,255,${edgeAlpha})`
+        ctx!.strokeStyle = `rgba(255,255,255,${0.04 + lift * 0.18})`
         ctx!.lineWidth = 0.9
         ctx!.stroke()
 
         ctx!.restore()
       }
+    }
 
-      // Subtle cursor glow on top
-      if (mouse.x > 0) {
-        const glow = ctx!.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 130)
-        glow.addColorStop(0, 'rgba(215,222,235,0.13)')
-        glow.addColorStop(1, 'rgba(215,222,235,0)')
-        ctx!.fillStyle = glow
-        ctx!.fillRect(0, 0, W, H)
+    const onMove = (e: MouseEvent) => {
+      const rect = canvas!.getBoundingClientRect()
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+
+      if (mx < 0 || mx > rect.width || my < 0 || my > rect.height) {
+        hoveredIndex = -1
+        return
       }
 
-      animId = requestAnimationFrame(draw)
+      hoveredIndex = -1
+      for (let i = 0; i < cells.length; i++) {
+        if (pointInPoly(mx, my, cells[i].poly)) {
+          hoveredIndex = i
+          break
+        }
+      }
     }
 
     resize()
     window.addEventListener('resize', resize)
-
-    const onMove = (e: MouseEvent) => {
-      const rect = canvas!.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-      // Only track when inside the canvas bounds
-      if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
-        targetMx = x
-        targetMy = y
-      } else {
-        targetMx = -999
-        targetMy = -999
-      }
-    }
     window.addEventListener('mousemove', onMove)
-
     animId = requestAnimationFrame(draw)
+
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', resize)
