@@ -118,3 +118,16 @@ html, body {
 .hero-grain {
   display: none;
 }
+
+/* ── Docs sidebar nav ────────────────────────────────── */
+.docs-nav-link {
+  display: block;
+  font-size: 13px;
+  color: rgba(0,0,0,0.5);
+  padding: 4px 0;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.docs-nav-link:hover {
+  color: #0a0a0a;
+}
