@@ -3,30 +3,30 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 
 from app.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
-
 
 def generate_api_key() -> tuple[str, str, str]:
-    """Returns (raw_key, hashed_key, prefix) — raw_key shown once, store hash + prefix."""
+    """Returns (raw_key, key_hash, key_prefix). raw_key shown once — store only hash + prefix."""
     raw = "juno_sk_" + secrets.token_urlsafe(32)
     hashed = hashlib.sha256(raw.encode()).hexdigest()
-    prefix = raw[:16]
+    prefix = raw[:16]  # "juno_sk_XXXXXXXX"
     return raw, hashed, prefix
 
 
 def hash_api_key(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def generate_magic_token() -> tuple[str, str]:
+    """Returns (raw_token, token_hash). raw_token goes in the email link."""
+    raw = secrets.token_urlsafe(32)
+    hashed = hashlib.sha256(raw.encode()).hexdigest()
+    return raw, hashed
+
+
+def hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 

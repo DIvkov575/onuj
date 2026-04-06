@@ -6,15 +6,14 @@ from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db import get_db
-from app.models import Workspace, Conversation
+from app.models import Workspace, Conversation, ApiKey
 from app.services.auth import hash_api_key
 from app.services.processing import process_workspace_conversations
 from app.config import settings
 
 router = APIRouter(tags=["ingest"])
 
-# Simple in-memory API key cache: hash -> workspace_id
-# Cleared on restart — acceptable, just causes one extra DB lookup per key
+# In-memory cache: key_hash -> workspace_id. Cleared on restart.
 _key_cache: dict[str, str] = {}
 
 
@@ -31,10 +30,21 @@ async def resolve_workspace(request: Request, db: AsyncSession) -> Workspace:
         result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
         workspace = result.scalar_one_or_none()
     else:
-        result = await db.execute(select(Workspace).where(Workspace.api_key_hash == key_hash))
+        # Look up active (non-revoked) key in api_keys table
+        result = await db.execute(
+            select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.revoked_at.is_(None))
+        )
+        api_key = result.scalar_one_or_none()
+        if not api_key:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+
+        # Update last_used_at (best-effort, don't await separately)
+        from datetime import datetime, timezone
+        api_key.last_used_at = datetime.now(timezone.utc)
+
+        _key_cache[key_hash] = str(api_key.workspace_id)
+        result = await db.execute(select(Workspace).where(Workspace.id == api_key.workspace_id))
         workspace = result.scalar_one_or_none()
-        if workspace:
-            _key_cache[key_hash] = str(workspace.id)
 
     if not workspace:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")

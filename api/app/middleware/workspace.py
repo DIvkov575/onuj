@@ -29,3 +29,13 @@ async def get_current_workspace(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Workspace not found")
 
     return workspace
+
+
+async def get_current_workspace_id(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+) -> str:
+    """Lightweight dependency — returns workspace_id string without a DB lookup."""
+    payload = decode_token(credentials.credentials)
+    if not payload or not payload.get("wid"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    return payload["wid"]

@@ -1,59 +1,123 @@
+from datetime import datetime, timezone, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db import get_db
-from app.models import User, Workspace
-from app.services.auth import hash_password, verify_password, generate_api_key, create_token
+from app.models import User, Workspace, MagicLinkToken
+from app.services.auth import generate_magic_token, hash_token, create_token, decode_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+TOKEN_TTL_MINUTES = 15
 
-class RegisterRequest(BaseModel):
+
+class MagicLinkRequest(BaseModel):
     email: EmailStr
-    password: str
-    workspace_name: str
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+class MagicLinkResponse(BaseModel):
+    token: str        # raw token — Next.js sends this in the email link
+    is_new_user: bool
 
 
-class AuthResponse(BaseModel):
+class VerifyRequest(BaseModel):
     token: str
+
+
+class VerifyResponse(BaseModel):
+    jwt: str
+    user_id: str
     workspace_id: str
-    api_key: str | None = None  # only returned on register
+    is_new_user: bool
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    existing = await db.execute(select(User).where(User.email == body.email))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+class MeResponse(BaseModel):
+    user_id: str
+    workspace_id: str
+    email: str
 
-    raw_key, hashed_key, prefix = generate_api_key()
 
-    workspace = Workspace(name=body.workspace_name, api_key_hash=hashed_key, api_key_prefix=prefix)
-    db.add(workspace)
-    await db.flush()  # get workspace.id
+@router.post("/magic-link", response_model=MagicLinkResponse)
+async def request_magic_link(body: MagicLinkRequest, db: AsyncSession = Depends(get_db)):
+    """Generate a one-time magic link token for the given email.
+    The caller (Next.js) is responsible for sending the email and building the link URL.
+    """
+    email = body.email.lower().strip()
 
-    user = User(workspace_id=workspace.id, email=body.email, password_hash=hash_password(body.password))
-    db.add(user)
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    is_new_user = user is None
+
+    raw_token, token_hash = generate_magic_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES)
+
+    record = MagicLinkToken(email=email, token_hash=token_hash, expires_at=expires_at)
+    db.add(record)
+    await db.commit()
+
+    return MagicLinkResponse(token=raw_token, is_new_user=is_new_user)
+
+
+@router.post("/verify", response_model=VerifyResponse)
+async def verify_magic_link(body: VerifyRequest, db: AsyncSession = Depends(get_db)):
+    """Validate a magic link token. Creates user + workspace on first login."""
+    token_hash = hash_token(body.token)
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(
+        select(MagicLinkToken).where(MagicLinkToken.token_hash == token_hash)
+    )
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
+    if record.used_at is not None:
+        raise HTTPException(status_code=400, detail="Link already used")
+    if record.expires_at.replace(tzinfo=timezone.utc) < now:
+        raise HTTPException(status_code=400, detail="Link expired")
+
+    # Mark used immediately
+    record.used_at = now
+
+    email = record.email
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    is_new_user = user is None
+
+    if is_new_user:
+        workspace = Workspace(name=email.split("@")[0])
+        db.add(workspace)
+        await db.flush()
+
+        user = User(workspace_id=workspace.id, email=email)
+        db.add(user)
+        await db.flush()
+
     await db.commit()
     await db.refresh(user)
 
-    token = create_token(str(user.id), str(workspace.id))
-    return AuthResponse(token=token, workspace_id=str(workspace.id), api_key=raw_key)
+    jwt_token = create_token(str(user.id), str(user.workspace_id))
+    return VerifyResponse(
+        jwt=jwt_token,
+        user_id=str(user.id),
+        workspace_id=str(user.workspace_id),
+        is_new_user=is_new_user,
+    )
 
 
-@router.post("/login", response_model=AuthResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == body.email))
+@router.get("/me", response_model=MeResponse)
+async def me(token: str, db: AsyncSession = Depends(get_db)):
+    """Decode JWT and return current user info. Pass token as query param."""
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    result = await db.execute(select(User).where(User.id == payload["sub"]))
     user = result.scalar_one_or_none()
-    if not user or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
 
-    token = create_token(str(user.id), str(user.workspace_id))
-    return AuthResponse(token=token, workspace_id=str(user.workspace_id))
+    return MeResponse(user_id=str(user.id), workspace_id=str(user.workspace_id), email=user.email)

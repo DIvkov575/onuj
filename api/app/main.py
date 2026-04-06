@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, ingest, dashboard
+from app.routers import api_keys
 
 app = FastAPI(title="Juno API", version="0.1.0")
 
@@ -16,6 +17,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/v1")
 app.include_router(ingest.router, prefix="/v1")
 app.include_router(dashboard.router, prefix="/v1")
+app.include_router(api_keys.router, prefix="/v1")
 
 
 @app.get("/healthz")
