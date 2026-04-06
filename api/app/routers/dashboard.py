@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -7,24 +7,28 @@ import uuid
 from app.db import get_db
 from app.models import Conversation, Cluster, Workspace
 from app.middleware.workspace import get_current_workspace
+from app.config import settings
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-# ── Clusters ─────────────────────────────────────────────────────────────────
+# ── Clusters ──────────────────────────────────────────────────────────────────
 
 class ClusterOut(BaseModel):
     id: str
     label: str
+    user_label: str | None
     count: int
     is_gap: bool
     hidden: bool
-
-    class Config:
-        from_attributes = True
+    updated_at: str
 
 
-@router.get("/clusters", response_model=list[ClusterOut])
+class ClustersResponse(BaseModel):
+    clusters: list[ClusterOut]
+
+
+@router.get("/clusters", response_model=ClustersResponse)
 async def list_clusters(
     workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
@@ -40,7 +44,18 @@ async def list_clusters(
 
     result = await db.execute(q)
     clusters = result.scalars().all()
-    return [ClusterOut(id=str(c.id), label=c.display_label, count=c.count, is_gap=c.is_gap, hidden=c.hidden) for c in clusters]
+    return ClustersResponse(clusters=[
+        ClusterOut(
+            id=str(c.id),
+            label=c.label,
+            user_label=c.user_label,
+            count=c.count,
+            is_gap=c.is_gap,
+            hidden=c.hidden,
+            updated_at=c.updated_at.isoformat(),
+        )
+        for c in clusters
+    ])
 
 
 class PatchCluster(BaseModel):
@@ -60,7 +75,6 @@ async def patch_cluster(
     )
     cluster = result.scalar_one_or_none()
     if not cluster:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Cluster not found")
 
     if body.user_label is not None:
@@ -81,47 +95,59 @@ class ConversationOut(BaseModel):
     gap_flagged: bool
     cluster_id: str | None
     cluster_label: str | None
+    turn_count: int
     created_at: str
 
 
-@router.get("/conversations", response_model=list[ConversationOut])
+class ConversationsResponse(BaseModel):
+    conversations: list[ConversationOut]
+    total: int
+
+
+@router.get("/conversations", response_model=ConversationsResponse)
 async def list_conversations(
     workspace: Workspace = Depends(get_current_workspace),
     db: AsyncSession = Depends(get_db),
     cluster_id: uuid.UUID | None = None,
-    gap_only: bool = False,
+    gap_flagged: bool = False,   # matches frontend param name
     q: str | None = Query(None, description="Search first_msg"),
-    limit: int = 50,
+    limit: int = Query(50, le=200),
     offset: int = 0,
 ):
-    query = (
+    base = (
         select(Conversation, Cluster.user_label, Cluster.label)
         .outerjoin(Cluster, Conversation.cluster_id == Cluster.id)
         .where(Conversation.workspace_id == workspace.id)
     )
     if cluster_id:
-        query = query.where(Conversation.cluster_id == cluster_id)
-    if gap_only:
-        query = query.where(Conversation.gap_flagged == True)
+        base = base.where(Conversation.cluster_id == cluster_id)
+    if gap_flagged:
+        base = base.where(Conversation.gap_flagged == True)
     if q:
-        query = query.where(Conversation.first_msg.ilike(f"%{q}%"))
+        base = base.where(Conversation.first_msg.ilike(f"%{q}%"))
 
-    query = query.order_by(Conversation.created_at.desc()).limit(limit).offset(offset)
-    result = await db.execute(query)
+    count_result = await db.execute(select(func.count()).select_from(base.subquery()))
+    total = count_result.scalar_one()
+
+    result = await db.execute(base.order_by(Conversation.created_at.desc()).limit(limit).offset(offset))
     rows = result.all()
 
-    return [
-        ConversationOut(
-            id=str(row.Conversation.id),
-            external_id=row.Conversation.external_id,
-            first_msg=row.Conversation.first_msg,
-            gap_flagged=row.Conversation.gap_flagged,
-            cluster_id=str(row.Conversation.cluster_id) if row.Conversation.cluster_id else None,
-            cluster_label=row.user_label or row.label,
-            created_at=row.Conversation.created_at.isoformat(),
-        )
-        for row in rows
-    ]
+    return ConversationsResponse(
+        total=total,
+        conversations=[
+            ConversationOut(
+                id=str(row.Conversation.id),
+                external_id=row.Conversation.external_id,
+                first_msg=row.Conversation.first_msg,
+                gap_flagged=row.Conversation.gap_flagged,
+                cluster_id=str(row.Conversation.cluster_id) if row.Conversation.cluster_id else None,
+                cluster_label=row.user_label or row.label,
+                turn_count=len(row.Conversation.turns) if row.Conversation.turns else 0,
+                created_at=row.Conversation.created_at.isoformat(),
+            )
+            for row in rows
+        ],
+    )
 
 
 class ConversationDetail(BaseModel):
@@ -147,7 +173,6 @@ async def get_conversation(
     )
     row = result.one_or_none()
     if not row:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     c = row.Conversation
@@ -181,27 +206,24 @@ async def overview(
     )
     gap_count = gap_result.scalar_one()
 
-    clusters_result = await db.execute(
-        select(Cluster)
-        .where(and_(Cluster.workspace_id == workspace.id, Cluster.hidden == False))
-        .order_by(Cluster.count.desc())
-        .limit(5)
+    cluster_result = await db.execute(
+        select(func.count()).where(
+            and_(Cluster.workspace_id == workspace.id, Cluster.hidden == False)
+        )
     )
-    top_clusters = clusters_result.scalars().all()
+    cluster_count = cluster_result.scalar_one()
 
-    gaps_result = await db.execute(
-        select(Cluster)
-        .where(and_(Cluster.workspace_id == workspace.id, Cluster.is_gap == True, Cluster.hidden == False))
-        .order_by(Cluster.count.desc())
-        .limit(5)
+    last_result = await db.execute(
+        select(func.max(Conversation.created_at)).where(Conversation.workspace_id == workspace.id)
     )
-    top_gaps = gaps_result.scalars().all()
+    last_received_at = last_result.scalar_one()
 
     return {
         "total_conversations": total,
-        "gap_count": gap_count,
+        "monthly_count": workspace.conv_count_month,
+        "monthly_limit": settings.free_tier_monthly_limit if workspace.plan == "free" else None,
+        "plan": workspace.plan,
         "gap_rate": round(gap_count / total, 3) if total else 0,
-        "ready": total >= 50,
-        "top_clusters": [{"id": str(c.id), "label": c.display_label, "count": c.count} for c in top_clusters],
-        "top_gaps": [{"id": str(c.id), "label": c.display_label, "count": c.count} for c in top_gaps],
+        "cluster_count": cluster_count,
+        "last_received_at": last_received_at.isoformat() if last_received_at else None,
     }

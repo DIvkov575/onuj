@@ -13,9 +13,6 @@ from app.config import settings
 
 router = APIRouter(tags=["ingest"])
 
-# In-memory cache: key_hash -> workspace_id. Cleared on restart.
-_key_cache: dict[str, str] = {}
-
 
 async def resolve_workspace(request: Request, db: AsyncSession) -> Workspace:
     auth = request.headers.get("Authorization", "")
@@ -25,30 +22,19 @@ async def resolve_workspace(request: Request, db: AsyncSession) -> Workspace:
     raw_key = auth.removeprefix("Bearer ").strip()
     key_hash = hash_api_key(raw_key)
 
-    if key_hash in _key_cache:
-        workspace_id = _key_cache[key_hash]
-        result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
-        workspace = result.scalar_one_or_none()
-    else:
-        # Look up active (non-revoked) key in api_keys table
-        result = await db.execute(
-            select(ApiKey).where(ApiKey.key_hash == key_hash, ApiKey.revoked_at.is_(None))
-        )
-        api_key = result.scalar_one_or_none()
-        if not api_key:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-
-        # Update last_used_at (best-effort, don't await separately)
-        from datetime import datetime, timezone
-        api_key.last_used_at = datetime.now(timezone.utc)
-
-        _key_cache[key_hash] = str(api_key.workspace_id)
-        result = await db.execute(select(Workspace).where(Workspace.id == api_key.workspace_id))
-        workspace = result.scalar_one_or_none()
-
-    if not workspace:
+    # Always hit the DB so revocation is respected immediately.
+    # key_hash has a unique index so this is one indexed lookup.
+    result = await db.execute(
+        select(ApiKey, Workspace)
+        .join(Workspace, ApiKey.workspace_id == Workspace.id)
+        .where(ApiKey.key_hash == key_hash, ApiKey.revoked_at.is_(None))
+    )
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
+    api_key, workspace = row
+    api_key.last_used_at = datetime.now(timezone.utc)  # committed with the ingest transaction
     return workspace
 
 

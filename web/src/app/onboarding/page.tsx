@@ -24,23 +24,15 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
 
-    // Update workspace name
-    const res = await fetch(`${API}/v1/workspace`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify({ name: workspaceName.trim() }),
-    })
+    const token = getToken()
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+
+    // Update workspace name (best-effort — not blocking if it fails)
+    await fetch(`${API}/v1/workspace`, { method: 'PATCH', headers, body: JSON.stringify({ name: workspaceName.trim() }) })
 
     // Create first API key
     const keyRes = await fetch(`${API}/v1/api-keys`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
+      method: 'POST', headers,
       body: JSON.stringify({ name: 'Default' }),
     })
 

@@ -1,25 +1,54 @@
+import time
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.db import get_db
 from app.models import User, Workspace, MagicLinkToken
-from app.services.auth import generate_magic_token, hash_token, create_token, decode_token
+from app.services.auth import generate_magic_token, hash_token, create_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 TOKEN_TTL_MINUTES = 15
 
+# ── Simple in-memory rate limiter ─────────────────────────────────────────────
+# Per-email: max 5 requests per 10 minutes
+# Per-IP:    max 20 requests per 10 minutes
+_email_times: dict[str, list[float]] = defaultdict(list)
+_ip_times:    dict[str, list[float]] = defaultdict(list)
+_RL_WINDOW   = 600   # 10 minutes in seconds
+_EMAIL_LIMIT = 5
+_IP_LIMIT    = 20
+
+
+def _check_rate_limit(email: str, ip: str):
+    now = time.time()
+    cutoff = now - _RL_WINDOW
+
+    _email_times[email] = [t for t in _email_times[email] if t > cutoff]
+    _ip_times[ip]       = [t for t in _ip_times[ip]       if t > cutoff]
+
+    if len(_email_times[email]) >= _EMAIL_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many requests for this email. Try again in 10 minutes.")
+    if len(_ip_times[ip]) >= _IP_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in 10 minutes.")
+
+    _email_times[email].append(now)
+    _ip_times[ip].append(now)
+
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class MagicLinkRequest(BaseModel):
     email: EmailStr
 
 
 class MagicLinkResponse(BaseModel):
-    token: str        # raw token — Next.js sends this in the email link
+    token: str        # raw token — caller sends this in the email link
     is_new_user: bool
 
 
@@ -31,31 +60,46 @@ class VerifyResponse(BaseModel):
     jwt: str
     user_id: str
     workspace_id: str
+    workspace_name: str
     is_new_user: bool
 
 
 class MeResponse(BaseModel):
     user_id: str
     workspace_id: str
+    workspace_name: str
     email: str
 
 
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @router.post("/magic-link", response_model=MagicLinkResponse)
-async def request_magic_link(body: MagicLinkRequest, db: AsyncSession = Depends(get_db)):
-    """Generate a one-time magic link token for the given email.
-    The caller (Next.js) is responsible for sending the email and building the link URL.
-    """
+async def request_magic_link(
+    body: MagicLinkRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    ip = request.client.host if request.client else "unknown"
     email = body.email.lower().strip()
+    _check_rate_limit(email, ip)
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     is_new_user = user is None
 
+    # Invalidate all previous unused tokens for this email
+    await db.execute(
+        update(MagicLinkToken)
+        .where(
+            MagicLinkToken.email == email,
+            MagicLinkToken.used_at.is_(None),
+        )
+        .values(used_at=datetime.now(timezone.utc))
+    )
+
     raw_token, token_hash = generate_magic_token()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES)
-
-    record = MagicLinkToken(email=email, token_hash=token_hash, expires_at=expires_at)
-    db.add(record)
+    db.add(MagicLinkToken(email=email, token_hash=token_hash, expires_at=expires_at))
     await db.commit()
 
     return MagicLinkResponse(token=raw_token, is_new_user=is_new_user)
@@ -63,7 +107,6 @@ async def request_magic_link(body: MagicLinkRequest, db: AsyncSession = Depends(
 
 @router.post("/verify", response_model=VerifyResponse)
 async def verify_magic_link(body: VerifyRequest, db: AsyncSession = Depends(get_db)):
-    """Validate a magic link token. Creates user + workspace on first login."""
     token_hash = hash_token(body.token)
     now = datetime.now(timezone.utc)
 
@@ -79,10 +122,9 @@ async def verify_magic_link(body: VerifyRequest, db: AsyncSession = Depends(get_
     if record.expires_at.replace(tzinfo=timezone.utc) < now:
         raise HTTPException(status_code=400, detail="Link expired")
 
-    # Mark used immediately
     record.used_at = now
-
     email = record.email
+
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     is_new_user = user is None
@@ -91,10 +133,12 @@ async def verify_magic_link(body: VerifyRequest, db: AsyncSession = Depends(get_
         workspace = Workspace(name=email.split("@")[0])
         db.add(workspace)
         await db.flush()
-
         user = User(workspace_id=workspace.id, email=email)
         db.add(user)
         await db.flush()
+    else:
+        result = await db.execute(select(Workspace).where(Workspace.id == user.workspace_id))
+        workspace = result.scalar_one()
 
     await db.commit()
     await db.refresh(user)
@@ -104,20 +148,31 @@ async def verify_magic_link(body: VerifyRequest, db: AsyncSession = Depends(get_
         jwt=jwt_token,
         user_id=str(user.id),
         workspace_id=str(user.workspace_id),
+        workspace_name=workspace.name,
         is_new_user=is_new_user,
     )
 
 
 @router.get("/me", response_model=MeResponse)
 async def me(token: str, db: AsyncSession = Depends(get_db)):
-    """Decode JWT and return current user info. Pass token as query param."""
+    from app.services.auth import decode_token
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    result = await db.execute(select(User).where(User.id == payload["sub"]))
-    user = result.scalar_one_or_none()
-    if not user:
+    result = await db.execute(
+        select(User, Workspace)
+        .join(Workspace, User.workspace_id == Workspace.id)
+        .where(User.id == payload["sub"])
+    )
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=401, detail="User not found")
 
-    return MeResponse(user_id=str(user.id), workspace_id=str(user.workspace_id), email=user.email)
+    user, workspace = row
+    return MeResponse(
+        user_id=str(user.id),
+        workspace_id=str(user.workspace_id),
+        workspace_name=workspace.name,
+        email=user.email,
+    )

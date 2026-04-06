@@ -22,7 +22,9 @@ function VerifyInner() {
       .then(r => r.json())
       .then(data => {
         if (data.jwt) {
-          document.cookie = `juno_session=${data.jwt}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`
+          const secure = location.protocol === 'https:' ? '; Secure' : ''
+          const maxAge = 60 * 60 * 24 * 7  // 7 days — matches JWT expiry
+          document.cookie = `juno_session=${data.jwt}; path=/; max-age=${maxAge}; SameSite=Lax${secure}`
           router.replace(data.is_new_user ? '/onboarding' : '/dashboard')
         } else {
           setError(data.detail ?? 'Link invalid or expired.')

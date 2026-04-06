@@ -43,10 +43,11 @@ export default function DashboardPage() {
   if (error) return <p style={{ color: '#c0392b', fontSize: 14 }}>{error}</p>
   if (!data) return <p style={{ color: 'rgba(0,0,0,0.35)', fontSize: 14 }}>Loading…</p>
 
-  const gapPct = data.gap_rate != null ? `${Math.round(data.gap_rate * 100)}%` : '—'
-  const lastSeen = data.last_received_at
-    ? new Date(data.last_received_at).toLocaleDateString()
-    : 'Never'
+  const gapPct = `${Math.round((data.gap_rate ?? 0) * 100)}%`
+  const lastSeen = data.last_received_at ? new Date(data.last_received_at).toLocaleDateString() : 'Never'
+  const monthSub = data.monthly_limit
+    ? `${data.monthly_count.toLocaleString()} of ${data.monthly_limit.toLocaleString()} (${data.plan})`
+    : data.plan
 
   return (
     <div>
@@ -55,10 +56,10 @@ export default function DashboardPage() {
       </h1>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 48 }}>
-        <Stat label="Total conversations" value={data.total_conversations.toLocaleString()} />
-        <Stat label="This month" value={data.monthly_count.toLocaleString()} sub={data.monthly_limit ? `of ${data.monthly_limit.toLocaleString()} limit` : undefined} />
+        <Stat label="Total conversations" value={data.total_conversations.toLocaleString()} sub={`last data ${lastSeen}`} />
+        <Stat label="This month" value={data.monthly_count.toLocaleString()} sub={monthSub} />
         <Stat label="Gap rate" value={gapPct} sub="conversations with unanswered intent" />
-        <Stat label="Intent clusters" value={data.cluster_count} sub={`last data ${lastSeen}`} />
+        <Stat label="Intent clusters" value={data.cluster_count} />
       </div>
 
       {data.total_conversations === 0 && (

@@ -11,8 +11,15 @@ class Settings(BaseSettings):
 
     openai_api_key: str
 
+    # Comma-separated allowed origins for CORS
+    cors_origins: str = "http://localhost:3000"
+
     # Plan limits
     free_tier_monthly_limit: int = 10_000
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 settings = Settings()

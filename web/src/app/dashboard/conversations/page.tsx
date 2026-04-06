@@ -26,7 +26,7 @@ export default function ConversationsPage() {
     if (search) params.set('q', search)
     if (gapsOnly) params.set('gap_flagged', 'true')
     apiFetch(`/dashboard/conversations?${params}`)
-      .then(d => { setConvs(d.conversations ?? d); setLoading(false) })
+      .then(d => { setConvs(d.conversations); setLoading(false) })
       .catch(e => { setError(e.message); setLoading(false) })
   }, [search, gapsOnly])
 
