@@ -88,7 +88,7 @@ async def create_key(
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_key(
-    key_id: str,
+    key_id: uuid.UUID,   # FastAPI validates UUID format; returns 422 on bad input
     workspace_id: str = Depends(get_current_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):

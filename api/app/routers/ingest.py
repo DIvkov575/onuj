@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update, literal_column
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db import get_db
@@ -96,6 +96,8 @@ async def ingest(
         turns_data = [t.model_dump() for t in event.turns]
         first_msg = extract_first_msg(event.turns)
 
+        # Use xmax to distinguish inserts (xmax=0) from updates (xmax!=0).
+        # ON CONFLICT DO UPDATE always returns rowcount=1, so rowcount is useless here.
         stmt = (
             pg_insert(Conversation)
             .values(
@@ -112,15 +114,23 @@ async def ingest(
                     "first_msg": first_msg,
                 },
             )
+            .returning(literal_column("xmax::text"))
         )
         result = await db.execute(stmt)
-        if result.rowcount > 0:
-            accepted += 1
+        xmax = result.scalar()
+        if xmax == "0":
+            accepted += 1   # genuine insert
         else:
-            skipped += 1
+            skipped += 1    # update to existing conversation
 
-    # Increment monthly counter
-    workspace.conv_count_month = (workspace.conv_count_month or 0) + accepted
+    # Increment monthly counter atomically — avoids lost-update race when
+    # multiple ingest requests arrive concurrently for the same workspace.
+    if accepted > 0:
+        await db.execute(
+            update(Workspace)
+            .where(Workspace.id == workspace.id)
+            .values(conv_count_month=Workspace.conv_count_month + accepted)
+        )
     await db.commit()
 
     # Kick off embedding + gap scoring in the background — response returns immediately

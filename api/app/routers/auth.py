@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -32,9 +33,18 @@ def _check_rate_limit(email: str, ip: str):
     _email_times[email] = [t for t in _email_times[email] if t > cutoff]
     _ip_times[ip]       = [t for t in _ip_times[ip]       if t > cutoff]
 
-    if len(_email_times[email]) >= _EMAIL_LIMIT:
+    # Prune empty entries to prevent unbounded dict growth
+    if not _email_times[email]:
+        del _email_times[email]
+    if not _ip_times[ip]:
+        del _ip_times[ip]
+
+    email_count = len(_email_times.get(email, []))
+    ip_count    = len(_ip_times.get(ip, []))
+
+    if email_count >= _EMAIL_LIMIT:
         raise HTTPException(status_code=429, detail="Too many requests for this email. Try again in 10 minutes.")
-    if len(_ip_times[ip]) >= _IP_LIMIT:
+    if ip_count >= _IP_LIMIT:
         raise HTTPException(status_code=429, detail="Too many requests. Try again in 10 minutes.")
 
     _email_times[email].append(now)
@@ -154,9 +164,12 @@ async def verify_magic_link(body: VerifyRequest, db: AsyncSession = Depends(get_
 
 
 @router.get("/me", response_model=MeResponse)
-async def me(token: str, db: AsyncSession = Depends(get_db)):
+async def me(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    db: AsyncSession = Depends(get_db),
+):
     from app.services.auth import decode_token
-    payload = decode_token(token)
+    payload = decode_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
 
