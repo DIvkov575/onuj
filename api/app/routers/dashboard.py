@@ -223,7 +223,7 @@ async def overview(
         "monthly_count": workspace.conv_count_month,
         "monthly_limit": settings.free_tier_monthly_limit if workspace.plan == "free" else None,
         "plan": workspace.plan,
-        "gap_rate": round(gap_count / total, 3) if total else 0,
+        "gap_rate": round(gap_count / total, 3) if total else 0.0,
         "cluster_count": cluster_count,
         "last_received_at": last_received_at.isoformat() if last_received_at else None,
     }

@@ -85,3 +85,41 @@ setup-local:
 
 migrate-local: _check-pg _migrate-local
 	@echo "Migrations applied."
+
+# ── Quality checks ───────────────────────────────────────────────────────────
+# make check    Full pre-commit check: typecheck + import check + smoke tests
+# make test     Smoke tests only (API must be running)
+
+check: _check-pg _migrate-local _start-api-bg
+	@echo "--- TypeScript build ---"
+	cd web && npm run build
+	@echo "--- Python import check ---"
+	cd api && PYTHONPATH=. .venv/bin/python -c "from app.main import app; print('imports OK')"
+	@echo "--- Smoke tests ---"
+	cd api && PYTHONPATH=. .venv/bin/pytest tests/smoke_test.py -v
+	@$(MAKE) _stop-api-bg
+	@echo ""
+	@echo "✓ All checks passed"
+
+test: _check-pg
+	@# Assumes API is already running; starts it if not
+	@curl -s http://localhost:8000/healthz > /dev/null 2>&1 || $(MAKE) _start-api-bg && sleep 2
+	cd api && PYTHONPATH=. .venv/bin/pytest tests/smoke_test.py -v
+
+_start-api-bg:
+	@pkill -f "uvicorn app.main:app" 2>/dev/null || true
+	@sleep 1
+	cd api && PYTHONPATH=. .venv/bin/uvicorn app.main:app --port 8000 > /tmp/juno-api.log 2>&1 & echo $$! > /tmp/juno-api.pid
+	@sleep 3
+	@curl -sf http://localhost:8000/healthz > /dev/null || (cat /tmp/juno-api.log && exit 1)
+
+_stop-api-bg:
+	@kill $$(cat /tmp/juno-api.pid 2>/dev/null) 2>/dev/null || true
+	@rm -f /tmp/juno-api.pid
+
+# ── Git pre-commit hook ───────────────────────────────────────────────────────
+
+install-hooks:
+	@echo '#!/bin/sh\nmake check' > .git/hooks/pre-commit
+	@chmod +x .git/hooks/pre-commit
+	@echo "Pre-commit hook installed. 'make check' will run before every commit."

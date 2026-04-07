@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
 
-    openai_api_key: str
+    openai_api_key: str | None = None   # optional — only needed for embedding
 
     # Comma-separated allowed origins for CORS
     cors_origins: str = "http://localhost:3000"
