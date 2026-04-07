@@ -6,12 +6,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent'>('idle')
   const [error, setError] = useState('')
+  const [devLink, setDevLink] = useState('')
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!email.trim()) return
     setStatus('loading')
     setError('')
+    setDevLink('')
 
     const res = await fetch('/api/auth/magic-link', {
       method: 'POST',
@@ -20,10 +22,13 @@ export default function LoginPage() {
     })
 
     if (res.ok) {
+      const data = await res.json()
+      if (data.dev_link) setDevLink(data.dev_link)
       setStatus('sent')
     } else {
+      const data = await res.json().catch(() => ({}))
       setStatus('idle')
-      setError('Something went wrong. Try again.')
+      setError(data.error ?? 'Something went wrong. Try again.')
     }
   }
 
@@ -49,13 +54,33 @@ export default function LoginPage() {
         {status === 'sent' ? (
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 12 }}>
-              Check your email
+              {devLink ? 'Your sign-in link' : 'Check your email'}
             </h1>
-            <p style={{ fontSize: 14, color: '#5a5a5a', lineHeight: 1.7 }}>
-              We sent a sign-in link to <strong>{email}</strong>. It expires in 15 minutes.
-            </p>
+            {devLink ? (
+              <>
+                <p style={{ fontSize: 13, color: '#5a5a5a', lineHeight: 1.6, marginBottom: 16 }}>
+                  No email provider is configured. Click the link below to sign in:
+                </p>
+                <a
+                  href={devLink}
+                  style={{
+                    display: 'block', wordBreak: 'break-all',
+                    fontSize: 13, color: '#0a0a0a', fontWeight: 500,
+                    background: 'rgba(0,0,0,0.04)', borderRadius: 8,
+                    padding: '12px 14px', textDecoration: 'none',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                  }}
+                >
+                  Sign in →
+                </a>
+              </>
+            ) : (
+              <p style={{ fontSize: 14, color: '#5a5a5a', lineHeight: 1.7 }}>
+                We sent a sign-in link to <strong>{email}</strong>. It expires in 15 minutes.
+              </p>
+            )}
             <button
-              onClick={() => { setStatus('idle'); setEmail('') }}
+              onClick={() => { setStatus('idle'); setEmail(''); setDevLink('') }}
               style={{
                 marginTop: 24, fontSize: 13, color: 'rgba(0,0,0,0.4)',
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,
@@ -67,10 +92,10 @@ export default function LoginPage() {
         ) : (
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', marginBottom: 8 }}>
-              Sign in
+              Sign in or create account
             </h1>
             <p style={{ fontSize: 14, color: '#5a5a5a', marginBottom: 32 }}>
-              We&apos;ll send you a magic link — no password needed.
+              Enter your email — we&apos;ll send a magic link. New emails create a free account automatically.
             </p>
 
             <form onSubmit={submit}>
@@ -103,7 +128,7 @@ export default function LoginPage() {
                   opacity: status === 'loading' ? 0.6 : 1,
                 }}
               >
-                {status === 'loading' ? 'Sending…' : 'Send magic link'}
+                {status === 'loading' ? 'Sending…' : 'Continue with email'}
               </button>
             </form>
           </div>

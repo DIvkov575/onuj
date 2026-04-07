@@ -7,7 +7,6 @@ export async function POST(req: NextRequest) {
   const { email } = await req.json()
   if (!email) return NextResponse.json({ error: 'Email required' }, { status: 400 })
 
-  // Ask backend to generate + store the token
   const res = await fetch(`${API}/v1/auth/magic-link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -18,10 +17,11 @@ export async function POST(req: NextRequest) {
   const { token } = await res.json()
   const link = `${APP_URL}/auth/verify?token=${token}`
 
-  // Send email (Resend) — fall back to console log for local dev
   const resendKey = process.env.RESEND_API_KEY
-  if (resendKey && !resendKey.startsWith('re_...')) {
-    await fetch('https://api.resend.com/emails', {
+  const hasRealResendKey = resendKey && resendKey !== 're_...' && !resendKey.startsWith('re_placeholder')
+
+  if (hasRealResendKey) {
+    const emailRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -35,10 +35,14 @@ export async function POST(req: NextRequest) {
         `,
       }),
     })
+    if (!emailRes.ok) {
+      console.error('Resend error:', await emailRes.text())
+      return NextResponse.json({ error: 'Failed to send email' }, { status: 502 })
+    }
+    return NextResponse.json({ ok: true })
   } else {
-    // Local dev: log the link so you can click it without email setup
+    // No email provider configured — return the link so the UI can display it
     console.log('\n🔗 Magic link (local dev):', link, '\n')
+    return NextResponse.json({ ok: true, dev_link: link })
   }
-
-  return NextResponse.json({ ok: true })
 }
