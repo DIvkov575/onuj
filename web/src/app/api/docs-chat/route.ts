@@ -119,20 +119,24 @@ interface RequestBody {
 
 // ── Juno logging (non-blocking) ───────────────────────────────────────────────
 
-function logToJuno(conversationId: string, messages: ChatMessage[]) {
+async function logToJuno(conversationId: string, messages: ChatMessage[]) {
   const apiKey = process.env.JUNO_API_KEY
   const endpoint = process.env.JUNO_API_URL ?? 'https://api.juno.so'
   if (!apiKey) return
 
   const turns = messages.map(m => ({ role: m.role, content: m.content }))
 
-  fetch(`${endpoint}/ingest`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      conversations: [{ external_id: `docs-chat-${conversationId}`, turns }],
-    }),
-  }).catch(() => {}) // fire and forget — never block the response
+  try {
+    await fetch(`${endpoint}/v1/ingest`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversations: [{ external_id: `docs-chat-${conversationId}`, turns }],
+      }),
+    })
+  } catch (e) {
+    console.error('[docs-chat] failed to log to Juno:', e)
+  }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -172,7 +176,7 @@ export async function POST(req: NextRequest) {
   const reply: string = data.content?.[0]?.text ?? ''
 
   // Log the full conversation (including assistant reply) to Juno
-  logToJuno(conversationId, [...messages, { role: 'assistant', content: reply }])
+  await logToJuno(conversationId, [...messages, { role: 'assistant', content: reply }])
 
   return NextResponse.json({ reply })
 }

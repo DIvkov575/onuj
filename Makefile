@@ -107,11 +107,7 @@ test: _check-pg
 	cd api && PYTHONPATH=. .venv/bin/pytest tests/smoke_test.py -v
 
 _start-api-bg:
-	@pkill -f "uvicorn app.main:app" 2>/dev/null || true
-	@sleep 1
-	cd api && PYTHONPATH=. .venv/bin/uvicorn app.main:app --port 8000 > /tmp/juno-api.log 2>&1 & echo $$! > /tmp/juno-api.pid
-	@sleep 3
-	@curl -sf http://localhost:8000/healthz > /dev/null || (cat /tmp/juno-api.log && exit 1)
+	@if curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then 	  echo "API already running"; 	else 	  pkill -f "uvicorn app.main:app" 2>/dev/null || true; 	  sleep 2; 	  cd api && PYTHONPATH=. .venv/bin/uvicorn app.main:app --port 8000 > /tmp/juno-api.log 2>&1 & echo $$! > /tmp/juno-api.pid; 	  sleep 3; 	  curl -sf http://localhost:8000/healthz > /dev/null || (cat /tmp/juno-api.log && exit 1); 	fi
 
 _stop-api-bg:
 	@kill $$(cat /tmp/juno-api.pid 2>/dev/null) 2>/dev/null || true
