@@ -23,6 +23,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./api:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
@@ -31,7 +33,25 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./worker:/app
     command: python main.py
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    env_file: ./web/.env.local
+    environment:
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - api
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
 
 volumes:
   pgdata:
